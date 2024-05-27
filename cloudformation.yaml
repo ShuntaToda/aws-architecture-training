@@ -1,0 +1,363 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  WebServerAMI:
+    Type: String
+    Default: ami-01340d9cf5b5c4e2e
+  DBInstanceIdentifier:
+    Type: String
+    Default: "training-laravel-db"
+  DBName:
+    Type: String
+    Default: "trainingLaravelDb"
+  DBUsername:
+    Type: String
+    Default: "admin"
+  DBPassword:
+    Type: String
+    Default: "password"
+  MyIPAdress:
+    Type: String
+    Default: "104.28.236.107/32"
+
+Resources:
+  TrainingVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: training-vpc
+
+  TrainingInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: training-internet-gateway
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref TrainingVpc
+      InternetGatewayId: !Ref TrainingInternetGateway
+    DependsOn:
+      - TrainingVpc
+      - TrainingInternetGateway
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TrainingVpc
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: 10.0.0.0/20
+      # サブネット内のインスタンスがpublicIPを受け取るれる設定
+      MapPublicIpOnLaunch: "true"
+      Tags:
+        - Key: Name
+          Value: training-subnet
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TrainingVpc
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: 10.0.16.0/20
+      # サブネット内のインスタンスがpublicIPを受け取るれる設定
+      MapPublicIpOnLaunch: "true"
+      Tags:
+        - Key: Name
+          Value: training-subnet
+
+  PublicSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TrainingVpc
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: 10.0.32.0/20
+      # サブネット内のインスタンスがpublicIPを受け取るれる設定
+      MapPublicIpOnLaunch: "true"
+      Tags:
+        - Key: Name
+          Value: training-subnet
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TrainingVpc
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: 10.0.48.0/20
+      Tags:
+        - Key: Name
+          Value: training-subnet
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref TrainingVpc
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: 10.0.64.0/20
+      Tags:
+        - Key: Name
+          Value: training-subnet
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref TrainingVpc
+      Tags:
+        - Key: Name
+          Value: training-routetable
+
+  PublicRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  PublicRouteTableAssociation3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet3
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref TrainingInternetGateway
+
+  PublicSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: pulic security group
+      GroupName: public security group
+      VpcId: !Ref TrainingVpc
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          ToPort: 80
+          FromPort: 80
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          ToPort: 443
+          FromPort: 443
+        - IpProtocol: tcp
+          CidrIp: !Ref MyIPAdress
+          ToPort: 22
+          FromPort: 22
+        - IpProtocol: tcp
+          CidrIp: 10.0.0.0/20
+          ToPort: 22
+          FromPort: 22
+
+  PrivateSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: private security group
+      GroupName: private-security-group
+      VpcId: !Ref TrainingVpc
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Ref PublicSecurityGroup
+          ToPort: 3306
+          FromPort: 3306
+        - IpProtocol: tcp
+          CidrIp: 10.0.48.0/20
+          ToPort: 3306
+          FromPort: 3306
+        - IpProtocol: tcp
+          CidrIp: 10.0.64.0/20
+          ToPort: 3306
+          FromPort: 3306
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !Ref PublicSecurityGroup
+          ToPort: 80
+          FromPort: 80
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Ref DBInstanceIdentifier
+      DBName: !Ref DBName
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: 20
+      Engine: mysql
+      VPCSecurityGroups:
+        - !Ref PrivateSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnets for RDS
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      DBSubnetGroupName: "training-db-subnet-group"
+
+  JumpServerEc2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-02a405b3302affc24
+      InstanceType: t2.micro
+      KeyName: architecture-training-key
+      NetworkInterfaces:
+        - SubnetId: !Ref PublicSubnet1
+          GroupSet:
+            - !Ref PublicSecurityGroup
+          AssociatePublicIpAddress: true
+          DeviceIndex: 0
+      Tags:
+        - Key: Name
+          Value: jump-server
+
+  DevServerEc2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0bbae60891362a24d
+      InstanceType: t2.micro
+      KeyName: architecture-image-key
+      NetworkInterfaces:
+        - SubnetId: !Ref PublicSubnet2
+          GroupSet:
+            - !Ref PublicSecurityGroup
+          AssociatePublicIpAddress: true
+          DeviceIndex: 0
+      Tags:
+        - Key: Name
+          Value: dev-server
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # RDSの情報を取得
+          RDS_ENDPOINT=${DBInstance.Endpoint.Address}
+          RDS_DATABASE=${DBName}
+          RDS_USERNAME=${DBUsername}
+          RDS_PASSWORD=${DBPassword}
+          cd /var/www/wsc2019-backend
+          # .envファイルを更新
+          sed -i "s/DB_HOST=.*/DB_HOST=$RDS_ENDPOINT/" .env
+          sed -i "s/DB_DATABASE=.*/DB_DATABASE=$RDS_DATABASE/" .env
+          sed -i "s/DB_USERNAME=.*/DB_USERNAME=$RDS_USERNAME/" .env
+          sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=$RDS_PASSWORD/" .env
+  Web1Server:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0bbae60891362a24d
+      InstanceType: t2.micro
+      KeyName: architecture-image-key
+      NetworkInterfaces:
+        - SubnetId: !Ref PrivateSubnet1
+          GroupSet:
+            - !Ref PrivateSecurityGroup
+          AssociatePublicIpAddress: true
+          DeviceIndex: 0
+      Tags:
+        - Key: Name
+          Value: web1-server
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # RDSの情報を取得
+          RDS_ENDPOINT=${DBInstance.Endpoint.Address}
+          RDS_DATABASE=${DBName}
+          RDS_USERNAME=${DBUsername}
+          RDS_PASSWORD=${DBPassword}
+          cd /var/www/wsc2019-backend
+          # .envファイルを更新
+          sed -i "s/DB_HOST=.*/DB_HOST=$RDS_ENDPOINT/" .env
+          sed -i "s/DB_DATABASE=.*/DB_DATABASE=$RDS_DATABASE/" .env
+          sed -i "s/DB_USERNAME=.*/DB_USERNAME=$RDS_USERNAME/" .env
+          sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=$RDS_PASSWORD/" .env
+  Web2Server:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0bbae60891362a24d
+      InstanceType: t2.micro
+      KeyName: architecture-image-key
+      NetworkInterfaces:
+        - SubnetId: !Ref PrivateSubnet2
+          GroupSet:
+            - !Ref PrivateSecurityGroup
+          AssociatePublicIpAddress: true
+          DeviceIndex: 0
+      Tags:
+        - Key: Name
+          Value: web2-server
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # RDSの情報を取得
+          RDS_ENDPOINT=${DBInstance.Endpoint.Address}
+          RDS_DATABASE=${DBName}
+          RDS_USERNAME=${DBUsername}
+          RDS_PASSWORD=${DBPassword}
+          cd /var/www/wsc2019-backend
+          # .envファイルを更新
+          sed -i "s/DB_HOST=.*/DB_HOST=$RDS_ENDPOINT/" .env
+          sed -i "s/DB_DATABASE=.*/DB_DATABASE=$RDS_DATABASE/" .env
+          sed -i "s/DB_USERNAME=.*/DB_USERNAME=$RDS_USERNAME/" .env
+          sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=$RDS_PASSWORD/" .env
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref TrainingVpc
+      Name: "training-tg"
+      Protocol: HTTP
+      Port: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: "/"
+      HealthCheckPort: "traffic-port"
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      HealthCheckTimeoutSeconds: 5
+      HealthCheckIntervalSeconds: 10
+      Matcher:
+        HttpCode: 200
+      Tags:
+        - Key: Name
+          Value: "training-tg"
+      Targets:
+        - Id: !Ref Web1Server
+          Port: 80
+        - Id: !Ref Web2Server
+          Port: 80
+  InternetALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: "training-ALB"
+      Tags:
+        - Key: Name
+          Value: "training-alb"
+      SecurityGroups:
+        - !Ref PublicSecurityGroup
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet3
+  ALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      # デフォルトルールのアクション
+      DefaultActions:
+        - TargetGroupArn: !Ref TargetGroup
+          # ルールアクションタイプ
+          # forwardは指定されたターゲットグループにリクエストを転送
+          Type: forward
+      LoadBalancerArn: !Ref InternetALB
+      Port: 80
+      Protocol: HTTP
