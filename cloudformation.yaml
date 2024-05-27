@@ -228,7 +228,7 @@ Resources:
   DevServerEc2:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: ami-0bbae60891362a24d
+      ImageId: !Ref WebServerAMI
       InstanceType: t2.micro
       KeyName: architecture-image-key
       NetworkInterfaces:
@@ -257,7 +257,7 @@ Resources:
   Web1Server:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: ami-0bbae60891362a24d
+      ImageId: !Ref WebServerAMI
       InstanceType: t2.micro
       KeyName: architecture-image-key
       NetworkInterfaces:
@@ -286,7 +286,7 @@ Resources:
   Web2Server:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: ami-0bbae60891362a24d
+      ImageId: !Ref WebServerAMI
       InstanceType: t2.micro
       KeyName: architecture-image-key
       NetworkInterfaces:
